@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -442,4 +441,3 @@ st.plotly_chart(
     fig_scatter,
     use_container_width=True
 )
-```
