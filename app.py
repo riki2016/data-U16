@@ -1,5 +1,4 @@
-# ================== LIBRERIE ==================
-
+```python
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -14,7 +13,7 @@ st.set_page_config(
 
 st.title("Dashboard Performance Atletica U16")
 
-# ================== 1. CARICAMENTO FILE ==================
+# ================== CARICAMENTO FILE ==================
 
 PATH_FILE = "Dataset_combinato_GPS_finale.xlsx"
 
@@ -35,7 +34,7 @@ else:
 
 st.success("File caricato con successo!")
 
-# ================== 2. PREPARAZIONE DATI ==================
+# ================== PREPARAZIONE DATI ==================
 
 df_raw['Data'] = pd.to_datetime(df_raw['Data'])
 
@@ -51,30 +50,45 @@ mask_training = (
 )
 
 # Dataset finale
-df = df_raw[mask_match_valid | mask_training].copy()
+df = df_raw[
+    mask_match_valid | mask_training
+].copy()
 
 # Ordina per data
 df = df.sort_values('Data')
 
+# ================== COLONNE NUMERICHE ==================
+
+numeric_cols = df.select_dtypes(
+    include='number'
+).columns.tolist()
+
+# Rimuove Vel Max se presente
+numeric_cols = [
+    col for col in numeric_cols
+    if col != 'Vel Max'
+]
+
 # ================== AGGREGAZIONE GIORNALIERA ==================
 
-numeric_cols = df.select_dtypes(include='number').columns.tolist()
-
-# Esclude Vel Max se necessario
-numeric_cols = [col for col in numeric_cols if col != 'Vel Max']
-
-# Aggregazione giornaliera
 df = df.groupby(
     ['PLAYER', 'Data', 'Competition'],
     as_index=False
 ).agg({
-    **{col: 'sum' for col in numeric_cols},
-    'Opponent': lambda x: ', '.join(sorted(set(x.dropna())))
+    **{
+        col: 'sum'
+        for col in numeric_cols
+    },
+
+    'Opponent': lambda x:
+        ', '.join(sorted(set(x.dropna())))
 })
 
 # ================== TEAM AVERAGE ==================
 
-df_team_avg = df[df['PLAYER'] == 'Team Average'].copy()
+df_team_avg = df[
+    df['PLAYER'] == 'Team Average'
+].copy()
 
 # ================== MEDIA ANNUALE ==================
 
@@ -86,18 +100,27 @@ df_media_annuale = (
     .reset_index()
 )
 
-# ================== LISTE FILTRI ==================
+# ================== LISTE ==================
 
 players = [
-    p for p in df['PLAYER'].dropna().unique().tolist()
+    p for p in df['PLAYER']
+    .dropna()
+    .unique()
+    .tolist()
+]
+
+players = [
+    p for p in players
     if p != 'Team Average'
 ]
 
-players.insert(0, 'Team Average')
-
 metriche = numeric_cols
 
-competitions = df['Competition'].dropna().unique()
+competitions = (
+    df['Competition']
+    .dropna()
+    .unique()
+)
 
 # ================== COLORI ==================
 
@@ -109,121 +132,159 @@ color_map = {
 
 # ================== SIDEBAR ==================
 
-st.sidebar.header("Filtri")
+st.sidebar.header("Filtri Dashboard")
 
-# Giocatore
-giocatore = st.sidebar.selectbox(
-    "Giocatore",
-    players
+# MULTI GIOCATORI
+giocatori_selezionati = st.sidebar.multiselect(
+    "Giocatori da confrontare",
+    players,
+    default=players[:2]
 )
 
-# Metrica principale
+# METRICA PRINCIPALE
 metrica = st.sidebar.selectbox(
-    "Metrica",
+    "Metrica principale",
     metriche
 )
 
-# ================== SCATTER FILTRI ==================
-
-st.sidebar.subheader("Scatter Performance")
-
+# SCATTER X
 metrica_x = st.sidebar.selectbox(
     "Metrica asse X",
     metriche,
     index=0
 )
 
+# SCATTER Y
 metrica_y = st.sidebar.selectbox(
     "Metrica asse Y",
     metriche,
     index=1
 )
 
-# ================== 3. GRAFICO PRINCIPALE ==================
+# ================== CONTROLLO SELEZIONE ==================
 
-df_plot = df[df['PLAYER'] == giocatore].copy()
+if len(giocatori_selezionati) == 0:
+    st.warning("Seleziona almeno un giocatore.")
+    st.stop()
+
+# ================== DATAFRAME GRAFICO ==================
+
+df_plot = df[
+    df['PLAYER'].isin(giocatori_selezionati)
+].copy()
+
+# ================== GRAFICO PRINCIPALE ==================
+
+st.subheader("Andamento Prestazioni")
 
 fig = go.Figure()
 
-# ================== BARRE ==================
+for player in giocatori_selezionati:
 
-for comp in competitions:
+    df_player = df_plot[
+        df_plot['PLAYER'] == player
+    ]
 
-    df_comp = df_plot[df_plot['Competition'] == comp]
+    for comp in competitions:
 
-    if df_comp.empty:
-        continue
+        df_comp = df_player[
+            df_player['Competition'] == comp
+        ]
 
-    fig.add_trace(go.Bar(
-        x=df_comp['Data'],
-        y=df_comp[metrica],
-        name=comp,
-        marker_color=color_map.get(comp, 'gray'),
-        width=24*60*60*1000,
+        if df_comp.empty:
+            continue
 
-        text=df_comp['Opponent']
-        if comp in ['League', 'Test Match']
-        else None,
+        fig.add_trace(go.Bar(
 
-        textposition='inside',
-        insidetextanchor='middle',
+            x=df_comp['Data'],
 
-        textfont=dict(
-            color='white',
-            size=11
-        ),
+            y=df_comp[metrica],
 
-        hovertemplate=
-            "<b>Data:</b> %{x}<br>" +
-            "<b>Valore:</b> %{y}<br>" +
-            "<b>Opponent:</b> %{text}<extra></extra>"
-    ))
+            name=f"{player} - {comp}",
 
-    # Valore sopra la barra
-    fig.add_trace(go.Scatter(
-        x=df_comp['Data'],
-        y=df_comp[metrica],
-        mode='text',
+            marker_color=color_map.get(
+                comp,
+                'gray'
+            ),
 
-        text=[
-            f'{v:.0f}'
-            for v in df_comp[metrica]
-        ],
+            opacity=0.75,
 
-        textposition='top center',
-        showlegend=False
-    ))
+            width=24*60*60*1000,
+
+            text=df_comp['Opponent']
+            if comp in ['League', 'Test Match']
+            else None,
+
+            textposition='inside',
+
+            insidetextanchor='middle',
+
+            textfont=dict(
+                color='white',
+                size=10
+            ),
+
+            hovertemplate=
+                f"<b>{player}</b><br>" +
+                "<b>Data:</b> %{x}<br>" +
+                "<b>Valore:</b> %{y}<br>" +
+                "<b>Opponent:</b> %{text}<extra></extra>"
+        ))
+
+        # Valori sopra barra
+        fig.add_trace(go.Scatter(
+
+            x=df_comp['Data'],
+
+            y=df_comp[metrica],
+
+            mode='text',
+
+            text=[
+                f'{v:.0f}'
+                for v in df_comp[metrica]
+            ],
+
+            textposition='top center',
+
+            showlegend=False
+        ))
 
 # ================== TEAM AVERAGE ==================
 
-if not df_team_avg.empty and giocatore != 'Team Average':
+if not df_team_avg.empty:
 
     fig.add_trace(go.Scatter(
+
         x=df_team_avg['Data'],
+
         y=df_team_avg[metrica],
 
         mode='markers',
 
-        name='Team Average (Ref)',
+        name='Team Average',
 
         marker=dict(
             symbol='asterisk',
-            size=10,
+            size=12,
             color='black',
             line=dict(width=1.5)
         )
     ))
 
-# ================== LAYOUT GRAFICO PRINCIPALE ==================
+# ================== LAYOUT ==================
 
 fig.update_layout(
-    title=f"{metrica} - {giocatore}",
 
-    barmode='overlay',
+    title=f"{metrica} - Confronto Giocatori",
+
+    barmode='group',
 
     hovermode='x unified',
 
     template='plotly_white',
+
+    height=700,
 
     legend=dict(
         orientation="h",
@@ -251,22 +312,20 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# ================== TABELLA MEDIA ANNUALE ==================
+# ================== MEDIA ANNUALE ==================
 
 st.subheader("Media Annuale")
 
 df_media_player = df_media_annuale[
-    df_media_annuale['PLAYER'] == giocatore
-][['Anno', metrica]]
+    df_media_annuale['PLAYER']
+    .isin(giocatori_selezionati)
+]
 
-df_media_player = df_media_player.rename(
-    columns={
-        metrica: 'Media Annuale'
-    }
-)
-
+# TABELLA
 st.dataframe(
-    df_media_player,
+    df_media_player[
+        ['PLAYER', 'Anno', metrica]
+    ],
     use_container_width=True
 )
 
@@ -274,23 +333,41 @@ st.dataframe(
 
 fig_media = go.Figure()
 
-fig_media.add_trace(go.Bar(
-    x=df_media_player['Anno'],
-    y=df_media_player['Media Annuale'],
+for player in giocatori_selezionati:
 
-    text=[
-        f'{v:.1f}'
-        for v in df_media_player['Media Annuale']
-    ],
+    df_temp = df_media_player[
+        df_media_player['PLAYER'] == player
+    ]
 
-    textposition='outside'
-))
+    fig_media.add_trace(go.Bar(
+
+        x=df_temp['Anno'],
+
+        y=df_temp[metrica],
+
+        name=player,
+
+        text=[
+            f'{v:.1f}'
+            for v in df_temp[metrica]
+        ],
+
+        textposition='outside'
+    ))
 
 fig_media.update_layout(
-    title=f"Media Annuale {metrica} - {giocatore}",
+
+    title=f"Media Annuale - {metrica}",
+
     template='plotly_white',
+
+    barmode='group',
+
     xaxis_title='Anno',
-    yaxis_title='Media'
+
+    yaxis_title='Media',
+
+    height=500
 )
 
 st.plotly_chart(
@@ -331,7 +408,7 @@ fig_scatter.add_trace(go.Scatter(
     textposition='top center',
 
     marker=dict(
-        size=14,
+        size=16,
         color='royalblue',
 
         line=dict(
@@ -358,10 +435,11 @@ fig_scatter.update_layout(
 
     yaxis_title=metrica_y,
 
-    height=700
+    height=800
 )
 
 st.plotly_chart(
     fig_scatter,
     use_container_width=True
 )
+```
