@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -53,8 +54,13 @@ df = df_raw[
     mask_match_valid | mask_training
 ].copy()
 
-# Ordina per data
-df = df.sort_values('Data')
+# ================== TIPO SESSIONE ==================
+
+df['Tipo Sessione'] = df['Competition'].apply(
+    lambda x: 'Full Match'
+    if x in ['League', 'Test Match']
+    else 'Full Training'
+)
 
 # ================== COLONNE NUMERICHE ==================
 
@@ -71,7 +77,12 @@ numeric_cols = [
 # ================== AGGREGAZIONE ==================
 
 df = df.groupby(
-    ['PLAYER', 'Data', 'Competition'],
+    [
+        'PLAYER',
+        'Data',
+        'Competition',
+        'Tipo Sessione'
+    ],
     as_index=False
 ).agg({
     **{
@@ -82,22 +93,6 @@ df = df.groupby(
     'Opponent': lambda x:
         ', '.join(sorted(set(x.dropna())))
 })
-
-# ================== TEAM AVERAGE ==================
-
-df_team_avg = df[
-    df['PLAYER'] == 'Team Average'
-].copy()
-
-# ================== MEDIA ANNUALE ==================
-
-df['Anno'] = df['Data'].dt.year
-
-df_media_annuale = (
-    df.groupby(['PLAYER', 'Anno'])[numeric_cols]
-    .mean()
-    .reset_index()
-)
 
 # ================== LISTE ==================
 
@@ -115,56 +110,55 @@ players = [
 
 metriche = numeric_cols
 
-competitions = (
-    df['Competition']
-    .dropna()
-    .unique()
-)
-
-# ================== COLORI ==================
-
-color_map = {
-    'League': 'rgba(255,0,0,0.85)',
-    'Full Training': 'rgba(0,180,0,0.85)',
-    'Test Match': 'rgba(0,0,255,0.85)'
-}
-
 # ================== SIDEBAR ==================
 
 st.sidebar.header("Filtri Dashboard")
 
-# GIOCATORI GRAFICO PRINCIPALE
-giocatori_selezionati = st.sidebar.multiselect(
-    "Giocatori da confrontare",
-    players,
-    default=players[:2]
+# ================== TIPO MEDIA ==================
+
+tipo_media = st.sidebar.selectbox(
+    "Tipo Media",
+    [
+        "All",
+        "Media Full Match",
+        "Media Full Training"
+    ]
 )
 
-# METRICA PRINCIPALE
-metrica = st.sidebar.selectbox(
-    "Metrica principale",
-    metriche
-)
+# ================== FILTRO TIPO ==================
 
-# ================== FILTRI SCATTER ==================
+if tipo_media == "Media Full Match":
 
-st.sidebar.subheader("Profilo Prestativo")
+    df_filtered = df[
+        df['Tipo Sessione'] == 'Full Match'
+    ]
 
-# GIOCATORI SCATTER
+elif tipo_media == "Media Full Training":
+
+    df_filtered = df[
+        df['Tipo Sessione'] == 'Full Training'
+    ]
+
+else:
+
+    df_filtered = df.copy()
+
+# ================== GIOCATORI SCATTER ==================
+
 giocatori_scatter = st.sidebar.multiselect(
-    "Giocatori scatter",
+    "Giocatori da visualizzare",
     players,
     default=players
 )
 
-# METRICA X
+# ================== METRICHE ==================
+
 metrica_x = st.sidebar.selectbox(
     "Metrica asse X",
     metriche,
     index=0
 )
 
-# METRICA Y
 metrica_y = st.sidebar.selectbox(
     "Metrica asse Y",
     metriche,
@@ -173,238 +167,33 @@ metrica_y = st.sidebar.selectbox(
 
 # ================== CONTROLLO ==================
 
-if len(giocatori_selezionati) == 0:
+if len(giocatori_scatter) == 0:
     st.warning("Seleziona almeno un giocatore.")
     st.stop()
 
-# ================== DATAFRAME PRINCIPALE ==================
+# ================== MEDIA GIOCATORI ==================
 
-df_plot = df[
-    df['PLAYER'].isin(giocatori_selezionati)
-].copy()
-
-# ================== GRAFICO PRINCIPALE ==================
-
-st.subheader("Andamento Prestazioni")
-
-fig = go.Figure()
-
-for player in giocatori_selezionati:
-
-    df_player = df_plot[
-        df_plot['PLAYER'] == player
-    ]
-
-    for comp in competitions:
-
-        df_comp = df_player[
-            df_player['Competition'] == comp
-        ]
-
-        if df_comp.empty:
-            continue
-
-        fig.add_trace(go.Bar(
-
-            x=df_comp['Data'],
-
-            y=df_comp[metrica],
-
-            name=f"{player} - {comp}",
-
-            marker_color=color_map.get(
-                comp,
-                'gray'
-            ),
-
-            opacity=0.75,
-
-            width=24*60*60*1000,
-
-            text=df_comp['Opponent']
-            if comp in ['League', 'Test Match']
-            else None,
-
-            textposition='inside',
-
-            insidetextanchor='middle',
-
-            textfont=dict(
-                color='white',
-                size=10
-            ),
-
-            hovertemplate=
-                f"<b>{player}</b><br>" +
-                "<b>Data:</b> %{x}<br>" +
-                "<b>Valore:</b> %{y}<br>" +
-                "<b>Opponent:</b> %{text}<extra></extra>"
-        ))
-
-        # VALORI SOPRA LE BARRE
-        fig.add_trace(go.Scatter(
-
-            x=df_comp['Data'],
-
-            y=df_comp[metrica],
-
-            mode='text',
-
-            text=[
-                f'{v:.0f}'
-                for v in df_comp[metrica]
-            ],
-
-            textposition='top center',
-
-            showlegend=False
-        ))
-
-# ================== TEAM AVERAGE ==================
-
-if not df_team_avg.empty:
-
-    fig.add_trace(go.Scatter(
-
-        x=df_team_avg['Data'],
-
-        y=df_team_avg[metrica],
-
-        mode='markers',
-
-        name='Team Average',
-
-        marker=dict(
-            symbol='asterisk',
-            size=12,
-            color='black',
-            line=dict(width=1.5)
-        )
-    ))
-
-# ================== LAYOUT PRINCIPALE ==================
-
-fig.update_layout(
-
-    title=f"{metrica} - Confronto Giocatori",
-
-    barmode='group',
-
-    hovermode='x unified',
-
-    template='plotly_white',
-
-    height=700,
-
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1
-    ),
-
-    xaxis=dict(
-        type="date",
-        rangeslider=dict(visible=True)
-    ),
-
-    margin=dict(
-        l=40,
-        r=40,
-        t=80,
-        b=40
-    )
-)
-
-st.plotly_chart(
-    fig,
-    use_container_width=True
-)
-
-# ================== MEDIA ANNUALE ==================
-
-st.subheader("Media Annuale")
-
-df_media_player = df_media_annuale[
-    df_media_annuale['PLAYER']
-    .isin(giocatori_selezionati)
-]
-
-# TABELLA
-st.dataframe(
-    df_media_player[
-        ['PLAYER', 'Anno', metrica]
-    ],
-    use_container_width=True
-)
-
-# ================== GRAFICO MEDIA ANNUALE ==================
-
-fig_media = go.Figure()
-
-for player in giocatori_selezionati:
-
-    df_temp = df_media_player[
-        df_media_player['PLAYER'] == player
-    ]
-
-    fig_media.add_trace(go.Bar(
-
-        x=df_temp['Anno'],
-
-        y=df_temp[metrica],
-
-        name=player,
-
-        text=[
-            f'{v:.1f}'
-            for v in df_temp[metrica]
-        ],
-
-        textposition='outside'
-    ))
-
-fig_media.update_layout(
-
-    title=f"Media Annuale - {metrica}",
-
-    template='plotly_white',
-
-    barmode='group',
-
-    xaxis_title='Anno',
-
-    yaxis_title='Media',
-
-    height=500
-)
-
-st.plotly_chart(
-    fig_media,
-    use_container_width=True
-)
-
-# ================== SCATTER PERFORMANCE ==================
-
-st.subheader("Profilo Prestativo Giocatori")
-
-# MEDIA PER GIOCATORE
 df_scatter = (
-    df.groupby('PLAYER')[metriche]
+    df_filtered
+    .groupby('PLAYER')[metriche]
     .mean()
     .reset_index()
 )
 
-# RIMUOVE TEAM AVERAGE
+# Rimuove Team Average
 df_scatter = df_scatter[
     df_scatter['PLAYER'] != 'Team Average'
 ]
 
-# FILTRA GIOCATORI SCATTER
+# FILTRO GIOCATORI
 df_scatter = df_scatter[
-    df_scatter['PLAYER'].isin(giocatori_scatter)
+    df_scatter['PLAYER']
+    .isin(giocatori_scatter)
 ]
+
+# ================== TITOLO ==================
+
+st.subheader("Profilo Prestativo Giocatori")
 
 # ================== FIGURA SCATTER ==================
 
@@ -423,7 +212,7 @@ fig_scatter.add_trace(go.Scatter(
     textposition='top center',
 
     marker=dict(
-        size=16,
+        size=18,
         color='royalblue',
 
         line=dict(
@@ -455,7 +244,23 @@ fig_scatter.add_hline(
     line_color="gray"
 )
 
-# ================== LAYOUT SCATTER ==================
+# ================== ANNOTAZIONI QUADRANTI ==================
+
+fig_scatter.add_annotation(
+    x=x_mean,
+    y=df_scatter[metrica_y].max(),
+    text="Alta X",
+    showarrow=False
+)
+
+fig_scatter.add_annotation(
+    x=df_scatter[metrica_x].min(),
+    y=y_mean,
+    text="Alta Y",
+    showarrow=False
+)
+
+# ================== LAYOUT ==================
 
 fig_scatter.update_layout(
 
@@ -467,10 +272,25 @@ fig_scatter.update_layout(
 
     yaxis_title=metrica_y,
 
-    height=800
+    height=850
 )
 
 st.plotly_chart(
     fig_scatter,
     use_container_width=True
 )
+
+# ================== TABELLA MEDIE ==================
+
+st.subheader("Medie Giocatori")
+
+st.dataframe(
+    df_scatter[
+        ['PLAYER', metrica_x, metrica_y]
+    ].sort_values(
+        by=metrica_y,
+        ascending=False
+    ),
+    use_container_width=True
+)
+```
