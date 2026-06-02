@@ -3,7 +3,9 @@ import pandas as pd
 import plotly.graph_objects as go
 import os
 
-# ================== CONFIG PAGINA ==================
+# =========================================================
+# CONFIG PAGINA
+# =========================================================
 
 st.set_page_config(
     page_title="Dashboard Performance Atletica",
@@ -12,7 +14,9 @@ st.set_page_config(
 
 st.title("Dashboard Performance Atletica U16")
 
-# ================== CARICAMENTO FILE ==================
+# =========================================================
+# CARICAMENTO FILE
+# =========================================================
 
 PATH_FILE = "Dataset_combinato_GPS_finale.xlsx"
 
@@ -22,46 +26,79 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
+
     df_raw = pd.read_excel(uploaded_file)
 
 elif os.path.exists(PATH_FILE):
+
     df_raw = pd.read_excel(PATH_FILE)
 
 else:
+
     st.warning("Carica un file Excel per iniziare.")
     st.stop()
 
 st.success("File caricato con successo!")
 
-# ================== PREPARAZIONE DATI ==================
+# =========================================================
+# PREPARAZIONE DATI
+# =========================================================
 
 df_raw['Data'] = pd.to_datetime(df_raw['Data'])
 
-# Match validi
+# =========================================================
+# FILTRO MATCH
+# CONSIDERA SOLO:
+# Competition = League o Test Match
+# Time = Full Match
+# MatchDay = Full Match
+# =========================================================
+
 mask_match_valid = (
-    (df_raw['Competition'].isin(['League', 'Test Match'])) &
-    (df_raw['Time'] == 'Full Match')
+
+    (df_raw['Competition'].isin([
+        'League',
+        'Test Match'
+    ])) &
+
+    (df_raw['Time'] == 'Full Match') &
+
+    (df_raw['MatchDay'] == 'Full Match')
 )
 
-# Allenamenti
+# =========================================================
+# FILTRO TRAINING
+# =========================================================
+
 mask_training = (
     df_raw['Competition'] == 'Full Training'
 )
 
-# Dataset finale
+# =========================================================
+# DATASET FINALE
+# =========================================================
+
 df = df_raw[
     mask_match_valid | mask_training
 ].copy()
 
-# ================== TIPO SESSIONE ==================
+# =========================================================
+# TIPO SESSIONE
+# =========================================================
 
 df['Tipo Sessione'] = df['Competition'].apply(
-    lambda x: 'Full Match'
+
+    lambda x:
+    'Full Match'
+
     if x in ['League', 'Test Match']
+
     else 'Full Training'
 )
 
-# ================== COLONNE NUMERICHE ==================
+# =========================================================
+# COLONNE NUMERICHE
+# =========================================================
 
 numeric_cols = df.select_dtypes(
     include='number'
@@ -73,7 +110,12 @@ numeric_cols = [
     if col != 'Vel Max'
 ]
 
-# ================== AGGREGAZIONE ==================
+# =========================================================
+# AGGREGAZIONE
+# ATTENZIONE:
+# NON SOMMA
+# MEDIA GIORNALIERA
+# =========================================================
 
 df = df.groupby(
     [
@@ -84,8 +126,9 @@ df = df.groupby(
     ],
     as_index=False
 ).agg({
+
     **{
-        col: 'sum'
+        col: 'mean'
         for col in numeric_cols
     },
 
@@ -93,7 +136,9 @@ df = df.groupby(
         ', '.join(sorted(set(x.dropna())))
 })
 
-# ================== LISTE ==================
+# =========================================================
+# LISTA GIOCATORI
+# =========================================================
 
 players = [
     p for p in df['PLAYER']
@@ -107,16 +152,28 @@ players = [
     if p != 'Team Average'
 ]
 
+players = sorted(players)
+
+# =========================================================
+# LISTA METRICHE
+# =========================================================
+
 metriche = numeric_cols
 
-# ================== SIDEBAR ==================
+# =========================================================
+# SIDEBAR
+# =========================================================
 
 st.sidebar.header("Filtri Dashboard")
 
-# ================== TIPO MEDIA ==================
+# =========================================================
+# TIPO MEDIA
+# =========================================================
 
 tipo_media = st.sidebar.selectbox(
+
     "Tipo Media",
+
     [
         "All",
         "Media Full Match",
@@ -124,7 +181,9 @@ tipo_media = st.sidebar.selectbox(
     ]
 )
 
-# ================== FILTRO TIPO ==================
+# =========================================================
+# FILTRO TIPO
+# =========================================================
 
 if tipo_media == "Media Full Match":
 
@@ -142,59 +201,95 @@ else:
 
     df_filtered = df.copy()
 
-# ================== GIOCATORI SCATTER ==================
+# =========================================================
+# GIOCATORI
+# =========================================================
 
 giocatori_scatter = st.sidebar.multiselect(
+
     "Giocatori da visualizzare",
+
     players,
+
     default=players
 )
 
-# ================== METRICHE ==================
+# =========================================================
+# METRICA X
+# =========================================================
 
 metrica_x = st.sidebar.selectbox(
+
     "Metrica asse X",
+
     metriche,
+
     index=0
 )
 
+# =========================================================
+# METRICA Y
+# =========================================================
+
 metrica_y = st.sidebar.selectbox(
+
     "Metrica asse Y",
+
     metriche,
+
     index=1
 )
 
-# ================== CONTROLLO ==================
+# =========================================================
+# CONTROLLO
+# =========================================================
 
 if len(giocatori_scatter) == 0:
+
     st.warning("Seleziona almeno un giocatore.")
     st.stop()
 
-# ================== MEDIA GIOCATORI ==================
+# =========================================================
+# MEDIA GIOCATORI
+# =========================================================
 
 df_scatter = (
+
     df_filtered
+
     .groupby('PLAYER')[metriche]
+
     .mean()
+
     .reset_index()
 )
 
-# Rimuove Team Average
+# =========================================================
+# RIMUOVE TEAM AVERAGE
+# =========================================================
+
 df_scatter = df_scatter[
     df_scatter['PLAYER'] != 'Team Average'
 ]
 
+# =========================================================
 # FILTRO GIOCATORI
+# =========================================================
+
 df_scatter = df_scatter[
     df_scatter['PLAYER']
     .isin(giocatori_scatter)
 ]
 
-# ================== TITOLO ==================
+# =========================================================
+# TITOLO
+# =========================================================
 
 st.subheader("Profilo Prestativo Giocatori")
 
-# ================== FIGURA SCATTER ==================
+# =========================================================
+# FIGURA SCATTER
+# =========================================================
 
 fig_scatter = go.Figure()
 
@@ -211,7 +306,9 @@ fig_scatter.add_trace(go.Scatter(
     textposition='top center',
 
     marker=dict(
+
         size=18,
+
         color='royalblue',
 
         line=dict(
@@ -221,45 +318,43 @@ fig_scatter.add_trace(go.Scatter(
     ),
 
     hovertemplate=
+
         "<b>%{text}</b><br>" +
+
         f"{metrica_x}: %{{x:.2f}}<br>" +
+
         f"{metrica_y}: %{{y:.2f}}<extra></extra>"
 ))
 
-# ================== QUADRANTI ==================
+# =========================================================
+# QUADRANTI
+# =========================================================
 
 x_mean = df_scatter[metrica_x].mean()
+
 y_mean = df_scatter[metrica_y].mean()
 
 fig_scatter.add_vline(
+
     x=x_mean,
+
     line_dash="dash",
+
     line_color="gray"
 )
 
 fig_scatter.add_hline(
+
     y=y_mean,
+
     line_dash="dash",
+
     line_color="gray"
 )
 
-# ================== ANNOTAZIONI QUADRANTI ==================
-
-fig_scatter.add_annotation(
-    x=x_mean,
-    y=df_scatter[metrica_y].max(),
-    text="Alta X",
-    showarrow=False
-)
-
-fig_scatter.add_annotation(
-    x=df_scatter[metrica_x].min(),
-    y=y_mean,
-    text="Alta Y",
-    showarrow=False
-)
-
-# ================== LAYOUT ==================
+# =========================================================
+# LAYOUT
+# =========================================================
 
 fig_scatter.update_layout(
 
@@ -274,22 +369,29 @@ fig_scatter.update_layout(
     height=850
 )
 
+# =========================================================
+# VISUALIZZA GRAFICO
+# =========================================================
+
 st.plotly_chart(
     fig_scatter,
     use_container_width=True
 )
 
-# ================== TABELLA MEDIE ==================
+# =========================================================
+# TABELLA MEDIE
+# =========================================================
 
-st.subheader("Medie Giocatori")
+st.subheader("Tabella Medie Giocatori")
 
-st.dataframe(
-    df_scatter[
-        ['PLAYER', metrica_x, metrica_y]
-    ].sort_values(
-        by=metrica_y,
-        ascending=False
-    ),
-    use_container_width=True
+tabella = df_scatter[
+    ['PLAYER', metrica_x, metrica_y]
+].sort_values(
+    by=metrica_y,
+    ascending=False
 )
 
+st.dataframe(
+    tabella,
+    use_container_width=True
+)
