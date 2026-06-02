@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -395,3 +396,4 @@ st.dataframe(
     tabella,
     use_container_width=True
 )
+```
