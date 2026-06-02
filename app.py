@@ -62,13 +62,13 @@ numeric_cols = df.select_dtypes(
     include='number'
 ).columns.tolist()
 
-# Rimuove Vel Max se presente
+# Rimuove Vel Max
 numeric_cols = [
     col for col in numeric_cols
     if col != 'Vel Max'
 ]
 
-# ================== AGGREGAZIONE GIORNALIERA ==================
+# ================== AGGREGAZIONE ==================
 
 df = df.groupby(
     ['PLAYER', 'Data', 'Competition'],
@@ -133,7 +133,7 @@ color_map = {
 
 st.sidebar.header("Filtri Dashboard")
 
-# MULTI GIOCATORI
+# GIOCATORI GRAFICO PRINCIPALE
 giocatori_selezionati = st.sidebar.multiselect(
     "Giocatori da confrontare",
     players,
@@ -146,27 +146,38 @@ metrica = st.sidebar.selectbox(
     metriche
 )
 
-# SCATTER X
+# ================== FILTRI SCATTER ==================
+
+st.sidebar.subheader("Profilo Prestativo")
+
+# GIOCATORI SCATTER
+giocatori_scatter = st.sidebar.multiselect(
+    "Giocatori scatter",
+    players,
+    default=players
+)
+
+# METRICA X
 metrica_x = st.sidebar.selectbox(
     "Metrica asse X",
     metriche,
     index=0
 )
 
-# SCATTER Y
+# METRICA Y
 metrica_y = st.sidebar.selectbox(
     "Metrica asse Y",
     metriche,
     index=1
 )
 
-# ================== CONTROLLO SELEZIONE ==================
+# ================== CONTROLLO ==================
 
 if len(giocatori_selezionati) == 0:
     st.warning("Seleziona almeno un giocatore.")
     st.stop()
 
-# ================== DATAFRAME GRAFICO ==================
+# ================== DATAFRAME PRINCIPALE ==================
 
 df_plot = df[
     df['PLAYER'].isin(giocatori_selezionati)
@@ -230,7 +241,7 @@ for player in giocatori_selezionati:
                 "<b>Opponent:</b> %{text}<extra></extra>"
         ))
 
-        # Valori sopra barra
+        # VALORI SOPRA LE BARRE
         fig.add_trace(go.Scatter(
 
             x=df_comp['Data'],
@@ -271,7 +282,7 @@ if not df_team_avg.empty:
         )
     ))
 
-# ================== LAYOUT ==================
+# ================== LAYOUT PRINCIPALE ==================
 
 fig.update_layout(
 
@@ -378,16 +389,21 @@ st.plotly_chart(
 
 st.subheader("Profilo Prestativo Giocatori")
 
-# Media per giocatore
+# MEDIA PER GIOCATORE
 df_scatter = (
     df.groupby('PLAYER')[metriche]
     .mean()
     .reset_index()
 )
 
-# Rimuove Team Average
+# RIMUOVE TEAM AVERAGE
 df_scatter = df_scatter[
     df_scatter['PLAYER'] != 'Team Average'
+]
+
+# FILTRA GIOCATORI SCATTER
+df_scatter = df_scatter[
+    df_scatter['PLAYER'].isin(giocatori_scatter)
 ]
 
 # ================== FIGURA SCATTER ==================
@@ -421,6 +437,23 @@ fig_scatter.add_trace(go.Scatter(
         f"{metrica_x}: %{{x:.2f}}<br>" +
         f"{metrica_y}: %{{y:.2f}}<extra></extra>"
 ))
+
+# ================== QUADRANTI ==================
+
+x_mean = df_scatter[metrica_x].mean()
+y_mean = df_scatter[metrica_y].mean()
+
+fig_scatter.add_vline(
+    x=x_mean,
+    line_dash="dash",
+    line_color="gray"
+)
+
+fig_scatter.add_hline(
+    y=y_mean,
+    line_dash="dash",
+    line_color="gray"
+)
 
 # ================== LAYOUT SCATTER ==================
 
