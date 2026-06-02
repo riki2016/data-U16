@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -48,24 +47,38 @@ st.success("File caricato con successo!")
 df_raw['Data'] = pd.to_datetime(df_raw['Data'])
 
 # =========================================================
+# =========================================================
 # FILTRO MATCH
-# CONSIDERA SOLO:
-# Competition = League o Test Match
-# Time = Full Match
-# MatchDay = Full Match
 # =========================================================
 
-mask_match_valid = (
+# Caso in cui esiste MatchDay
+if 'MatchDay' in df_raw.columns:
 
-    (df_raw['Competition'].isin([
-        'League',
-        'Test Match'
-    ])) &
+    mask_match_valid = (
 
-    (df_raw['Time'] == 'Full Match') &
+        (df_raw['Competition'].isin([
+            'League',
+            'Test Match'
+        ])) &
 
-    (df_raw['MatchDay'] == 'Full Match')
-)
+        (df_raw['Time'] == 'Full Match') &
+
+        (df_raw['MatchDay'] == 'Full Match')
+    )
+
+# Caso in cui MatchDay NON esiste
+else:
+
+    mask_match_valid = (
+
+        (df_raw['Competition'].isin([
+            'League',
+            'Test Match'
+        ])) &
+
+        (df_raw['Time'] == 'Full Match')
+    )
+
 
 # =========================================================
 # FILTRO TRAINING
@@ -396,4 +409,4 @@ st.dataframe(
     tabella,
     use_container_width=True
 )
-```
+
