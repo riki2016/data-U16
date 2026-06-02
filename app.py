@@ -1,4 +1,3 @@
-```python
 # ================== LIBRERIE ==================
 
 import streamlit as st
